@@ -1,0 +1,65 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schedule": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Schedule"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    },
+    "owner": {
+      "default": "batch-ops",
+      "title": "Owner",
+      "type": "string"
+    },
+    "retries": {
+      "default": 1,
+      "title": "Retries",
+      "type": "integer"
+    },
+    "dag_id": {
+      "type": "string",
+      "description": "Unique DAG identifier"
+    },
+    "steps": {
+      "type": "object",
+      "description": "Blueprint step definitions",
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  },
+  "title": "DAG",
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "templateType": "dag_args",
+  "required": [
+    "steps",
+    "dag_id"
+  ]
+}
