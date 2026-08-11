@@ -135,6 +135,36 @@ class Reconciliation(Blueprint[ReconciliationConfig]):
 
 
 # ---------------------------------------------------------------------------
+# Standalone approval gate — drop between any two steps in YAML.
+# ---------------------------------------------------------------------------
+class ApprovalGateConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    subject: str = Field(description="Short prompt shown in Required Actions")
+    body: str = Field(
+        default="",
+        description="Markdown body shown to the approver (Jinja allowed)",
+    )
+    approvers: str = Field(
+        default="compliance",
+        description="Team or role that must approve (documentation only)",
+    )
+
+
+class ApprovalGate(Blueprint[ApprovalGateConfig]):
+    """Pause the run until a named approver responds in the Airflow UI."""
+
+    def render(self, config: ApprovalGateConfig) -> ApprovalOperator:
+        return ApprovalOperator(
+            task_id=self.step_id,
+            subject=config.subject,
+            body=config.body
+            or f"Approval requested from **{config.approvers}**.",
+            execution_timeout=None,
+            params={"comments": Param("", type="string")},
+        )
+
+
+# ---------------------------------------------------------------------------
 # Regulatory report with a compliance-gated release step.
 # ---------------------------------------------------------------------------
 class RegulatoryReportConfig(BaseModel):

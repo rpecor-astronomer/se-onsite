@@ -1,0 +1,68 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "subject": {
+      "description": "Short prompt shown in Required Actions",
+      "title": "Subject",
+      "type": "string"
+    },
+    "body": {
+      "default": "",
+      "description": "Markdown body shown to the approver (Jinja allowed)",
+      "title": "Body",
+      "type": "string"
+    },
+    "approvers": {
+      "default": "compliance",
+      "description": "Team or role that must approve (documentation only)",
+      "title": "Approvers",
+      "type": "string"
+    },
+    "blueprint": {
+      "type": "string",
+      "const": "approval_gate",
+      "description": "The blueprint template to use"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "The blueprint version"
+    },
+    "depends_on": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Steps that must complete before this step runs",
+      "default": []
+    },
+    "trigger_rule": {
+      "type": "string",
+      "enum": [
+        "all_done",
+        "all_done_min_one_success",
+        "all_done_setup_success",
+        "all_failed",
+        "all_skipped",
+        "all_success",
+        "always",
+        "none_failed",
+        "none_failed_min_one_success",
+        "none_skipped",
+        "one_done",
+        "one_failed",
+        "one_success"
+      ],
+      "description": "Trigger rule for this step (default: all_success)"
+    }
+  },
+  "required": [
+    "blueprint",
+    "version",
+    "subject"
+  ],
+  "title": "approval_gate",
+  "type": "object",
+  "templateType": "blueprint",
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

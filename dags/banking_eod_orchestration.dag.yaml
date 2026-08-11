@@ -1,0 +1,79 @@
+# Banking EOD orchestration — Blueprint port of Control-M folder
+#   BANKING_EOD_ORCHESTRATION (Application=BANKING_EOD)
+#
+# Control-M semantics preserved:
+#   - Weeknight window Mon-Fri, 22:00 ET start (schedule below)
+#   - z/OS jobs -> mainframe_job (JCL member on ZOS_AGENT_MF01)
+#   - Unix Command jobs -> distributed_job (host_group = UNIX_AGENT01)
+#   - "Add / Wait for Events" -> Airflow depends_on
+#
+# One net-new capability vs. Control-M: an approval_gate step that
+# pauses the run for compliance sign-off before the filing is submitted
+# to the regulator. The approver responds in Airflow's Required Actions
+# UI; the response is tied to the run, user, and timestamp.
+dag_id: banking_eod_orchestration
+description: "Ported from Control-M folder BANKING_EOD_ORCHESTRATION. Core banking + loan servicing feeding SOX/Call Report filing."
+schedule: "0 22 * * 1-5"          # Mon-Fri, 22:00 ET (Control-M's 2200-0600 window)
+tags: [banking-eod, regulatory-reporting, control-m-port]
+owner: batch-ops
+retries: 1
+
+steps:
+
+  # ---- Core banking (mainframe / z/OS) ------------------------------------
+  core_banking_gl_close:
+    blueprint: mainframe_job
+    jcl_member: GLCLOSE
+    lpar: PROD1
+    max_rc: 4
+
+  core_banking_interest_accrual:
+    blueprint: mainframe_job
+    depends_on: [core_banking_gl_close]
+    jcl_member: INTACCR
+    lpar: PROD1
+    max_rc: 4
+
+  # ---- Loan servicing (distributed / Unix) --------------------------------
+  loan_servicing_payment_process:
+    blueprint: distributed_job
+    script: /opt/banking/loan_servicing/run_payment_batch.sh
+    host_group: unix-agent01
+
+  loan_servicing_escrow_update:
+    blueprint: distributed_job
+    depends_on: [loan_servicing_payment_process]
+    script: /opt/banking/loan_servicing/run_escrow_update.sh
+    host_group: unix-agent01
+
+  # ---- Regulatory extracts (parallel, fan-in from both streams) -----------
+  reg_reporting_sox_cert:
+    blueprint: distributed_job
+    depends_on: [core_banking_interest_accrual, loan_servicing_escrow_update]
+    script: /opt/banking/reg_reporting/run_sox_cert.sh
+    host_group: unix-agent01
+
+  reg_reporting_call_report:
+    blueprint: distributed_job
+    depends_on: [core_banking_interest_accrual, loan_servicing_escrow_update]
+    script: /opt/banking/reg_reporting/run_call_report.sh
+    host_group: unix-agent01
+
+  # ---- Compliance gate — the net-new capability over Control-M ------------
+  compliance_signoff:
+    blueprint: approval_gate
+    depends_on: [reg_reporting_sox_cert, reg_reporting_call_report]
+    subject: "Approve regulator filing (SOX + Call Report)?"
+    body: |
+      **Package:** SOX certification + FFIEC Call Report
+
+      Both extracts have completed. Review the artifacts, then approve
+      to submit to the regulator, or reject to hold.
+    approvers: compliance-officers
+
+  # ---- Submit to regulator ------------------------------------------------
+  reg_reporting_submit_filing:
+    blueprint: distributed_job
+    depends_on: [compliance_signoff]
+    script: /opt/banking/reg_reporting/submit_filing.sh
+    host_group: unix-agent01
