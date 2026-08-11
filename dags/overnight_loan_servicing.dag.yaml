@@ -1,0 +1,53 @@
+# Overnight loan-servicing batch chain.
+#
+# This YAML replaces a 40-node Control-M folder. An operator edits this
+# file in a PR (the audit trail Compliance requires); the Airflow graph
+# view renders the exact same dependency picture the team used to see
+# in Control-M's GUI.
+dag_id: overnight_loan_servicing
+description: "Nightly loan-servicing batch, ported from Control-M folder LNSVC.NIGHTLY"
+schedule: "0 22 * * *"          # 10 PM ET, same window as today
+tags: [loan-servicing, nightly, compliance]
+owner: batch-ops
+retries: 2
+
+steps:
+
+  wait_for_gl_extract:
+    blueprint: file_watch
+    path: /mnt/inbound/gl/gl_extract.ok
+    poke_seconds: 15
+    timeout_minutes: 60
+
+  post_daily_interest:
+    blueprint: mainframe_job
+    depends_on: [wait_for_gl_extract]
+    jcl_member: LNSVC010
+    lpar: PROD1
+    max_rc: 4
+
+  amortization_recalc:
+    blueprint: mainframe_job
+    depends_on: [post_daily_interest]
+    jcl_member: LNSVC020
+    lpar: PROD1
+
+  distribute_statements:
+    blueprint: distributed_job
+    depends_on: [amortization_recalc]
+    script: /opt/batch/bin/statements.sh
+    host_group: unix-batch
+
+  core_recon:
+    blueprint: reconciliation
+    depends_on: [amortization_recalc]
+    system_a: FIS-CORE
+    system_b: GL
+    tolerance_cents: 0
+
+  call_report:
+    blueprint: regulatory_report
+    depends_on: [core_recon, distribute_statements]
+    report_code: CALL
+    prepared_by: regops
+    approval_timeout_minutes: 45
